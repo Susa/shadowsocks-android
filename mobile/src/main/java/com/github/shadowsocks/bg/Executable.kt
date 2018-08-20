@@ -22,9 +22,11 @@ package com.github.shadowsocks.bg
 
 import android.text.TextUtils
 import android.util.Log
+import com.crashlytics.android.Crashlytics
 import com.github.shadowsocks.App.Companion.app
 import com.github.shadowsocks.JniHelper
 import java.io.File
+import java.io.FileNotFoundException
 
 object Executable {
     const val REDSOCKS = "libredsocks.so"
@@ -33,14 +35,21 @@ object Executable {
     const val TUN2SOCKS = "libtun2socks.so"
     const val OVERTURE = "liboverture.so"
 
-    val EXECUTABLES = setOf(SS_LOCAL, SS_TUNNEL, REDSOCKS, TUN2SOCKS, OVERTURE)
+    private val EXECUTABLES = setOf(SS_LOCAL, SS_TUNNEL, REDSOCKS, TUN2SOCKS, OVERTURE)
 
     fun killAll() {
         for (process in File("/proc").listFiles { _, name -> TextUtils.isDigitsOnly(name) }) {
-            val exe = File(File(process, "cmdline").readText().split(Character.MIN_VALUE, limit = 2).first())
+            val exe = File(try {
+                File(process, "cmdline").readText()
+            } catch (ignore: FileNotFoundException) {
+                continue
+            }.split(Character.MIN_VALUE, limit = 2).first())
             if (exe.parent == app.applicationInfo.nativeLibraryDir && EXECUTABLES.contains(exe.name)) {
                 val errno = JniHelper.sigkill(process.name.toInt())
-                if (errno != 0) Log.w("kill", "SIGKILL ${exe.absolutePath} (${process.name}) failed with $errno")
+                if (errno != 0) {
+                    Crashlytics.log(Log.WARN, "kill",
+                            "SIGKILL ${exe.absolutePath} (${process.name}) failed with $errno")
+                }
             }
         }
     }

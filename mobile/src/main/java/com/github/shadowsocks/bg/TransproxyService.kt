@@ -22,7 +22,6 @@ package com.github.shadowsocks.bg
 
 import android.app.Service
 import android.content.Intent
-import android.os.IBinder
 import com.github.shadowsocks.App.Companion.app
 import com.github.shadowsocks.preference.DataStore
 import java.io.File
@@ -36,26 +35,22 @@ class TransproxyService : Service(), LocalDnsService.Interface {
     override fun createNotification(profileName: String): ServiceNotification =
             ServiceNotification(this, profileName, "service-transproxy", true)
 
-    override fun onBind(intent: Intent): IBinder? = super.onBind(intent)
+    override fun onBind(intent: Intent) = super.onBind(intent)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
             super<LocalDnsService.Interface>.onStartCommand(intent, flags, startId)
 
-    private var sstunnelProcess: GuardedProcess? = null
-    private var redsocksProcess: GuardedProcess? = null
-
     private fun startDNSTunnel() {
-        val cmd = arrayListOf(File(applicationInfo.nativeLibraryDir, Executable.SS_TUNNEL).absolutePath,
+        data.processes.start(listOf(File(applicationInfo.nativeLibraryDir, Executable.SS_TUNNEL).absolutePath,
                 "-t", "10",
                 "-b", "127.0.0.1",
                 "-u",
                 "-l", DataStore.portLocalDns.toString(),            // ss-tunnel listens on the same port as overture
                 "-L", data.profile!!.remoteDns.split(",").first().trim() + ":53",
-                "-c", data.shadowsocksConfigFile!!.absolutePath)    // config is already built by BaseService.Interface
-        sstunnelProcess = GuardedProcess(cmd).start()
+                "-c", data.shadowsocksConfigFile!!.absolutePath))   // config is already built by BaseService.Interface
     }
 
     private fun startRedsocksDaemon() {
-        File(app.deviceContext.filesDir, "redsocks.conf").writeText("""base {
+        File(app.deviceStorage.filesDir, "redsocks.conf").writeText("""base {
  log_debug = off;
  log_info = off;
  log = stderr;
@@ -70,23 +65,13 @@ redsocks {
  type = socks5;
 }
 """)
-        redsocksProcess = GuardedProcess(arrayListOf(
-                File(applicationInfo.nativeLibraryDir, Executable.REDSOCKS).absolutePath,
-                "-c", "redsocks.conf")
-        ).start()
+        data.processes.start(listOf(
+                File(applicationInfo.nativeLibraryDir, Executable.REDSOCKS).absolutePath, "-c", "redsocks.conf"))
     }
 
     override fun startNativeProcesses() {
         startRedsocksDaemon()
         super.startNativeProcesses()
         if (data.profile!!.udpdns) startDNSTunnel()
-    }
-
-    override fun killProcesses() {
-        super.killProcesses()
-        sstunnelProcess?.destroy()
-        sstunnelProcess = null
-        redsocksProcess?.destroy()
-        redsocksProcess = null
     }
 }

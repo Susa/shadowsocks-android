@@ -1,8 +1,9 @@
 ## Shadowsocks for Android
 
-[![Build Status](https://api.travis-ci.org/shadowsocks/shadowsocks-android.svg)](https://travis-ci.org/shadowsocks/shadowsocks-android)
+[![CircleCI](https://circleci.com/gh/shadowsocks/shadowsocks-android.svg?style=svg)](https://circleci.com/gh/shadowsocks/shadowsocks-android)
 [![API](https://img.shields.io/badge/API-21%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=21)
 [![Releases](https://img.shields.io/github/downloads/shadowsocks/shadowsocks-android/total.svg)](https://github.com/shadowsocks/shadowsocks-android/releases)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/1a21d48d466644cdbcb57a1889abea5b)](https://www.codacy.com/app/shadowsocks/shadowsocks-android?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=shadowsocks/shadowsocks-android&amp;utm_campaign=Badge_Grade)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 A [shadowsocks](http://shadowsocks.org) client for Android, written in Kotlin.  
@@ -19,19 +20,17 @@ A [shadowsocks](http://shadowsocks.org) client for Android, written in Kotlin.
 
 ### BUILD
 
+You can check whether the latest commit builds under UNIX environment by checking Travis status.
+Building on Windows is also possible since [#1570](https://github.com/shadowsocks/shadowsocks-android/pull/1570),
+but probably painful. Further contributions regarding building on Windows are also welcome.
+
 * Set environment variable `ANDROID_HOME` to `/path/to/android-sdk`
 * (optional) Set environment variable `ANDROID_NDK_HOME` to `/path/to/android-ndk` (default: `$ANDROID_HOME/ndk-bundle`)
 * Set environment variable `GOROOT_BOOTSTRAP` to `/path/to/go`
-* Fetch submodules using `$ git submodule update --init --recursive`
+* Clone the repo using `git clone --recurse-submodules <repo>` or update submodules using `git submodule update --init --recursive`
 * Build it using Android Studio or gradle script
 
-### TRANSLATE
-
-Translators can go to [POEditor](https://poeditor.com/join/project/u5VHO9vhSf) to help translate shadowsocks-android. Guidelines:
-
-* It's okay to leave some strings untranslated if you think it should use the same string as English (US).
-* `faq_url` should not be changed. If you'd like to translate FAQ, submit a pull request with the translated [`faq.md`](https://github.com/shadowsocks/shadowsocks-android/blob/master/.github/faq.md) (it should be named properly, e.g. `.github/faq.zh-CN.md`). Administrators will take care of the rest.
-* Do not add/edit/remove comments.
+### [TRANSLATE](https://discourse.shadowsocks.org/t/poeditor-translation-main-thread/30)
 
 ## OPEN SOURCE LICENSES
 

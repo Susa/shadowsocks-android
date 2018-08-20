@@ -23,14 +23,13 @@ package com.github.shadowsocks.bg
 import android.net.LocalServerSocket
 import android.net.LocalSocket
 import android.net.LocalSocketAddress
-import android.util.Log
-import com.github.shadowsocks.App.Companion.app
+import com.github.shadowsocks.utils.printLog
 import java.io.File
 import java.io.IOException
 
-abstract class LocalSocketListener(protected val tag: String) : Thread() {
+abstract class LocalSocketListener(protected val tag: String) : Thread(tag) {
     init {
-        setUncaughtExceptionHandler(app::track)
+        setUncaughtExceptionHandler { _, t -> printLog(t) }
     }
 
     protected abstract val socketFile: File
@@ -41,22 +40,21 @@ abstract class LocalSocketListener(protected val tag: String) : Thread() {
      * Inherited class do not need to close input/output streams as they will be closed automatically.
      */
     protected abstract fun accept(socket: LocalSocket)
-    override final fun run() {
+    final override fun run() {
         socketFile.delete() // It's a must-have to close and reuse previous local socket.
         LocalSocket().use { localSocket ->
             val serverSocket = try {
                 localSocket.bind(LocalSocketAddress(socketFile.absolutePath, LocalSocketAddress.Namespace.FILESYSTEM))
                 LocalServerSocket(localSocket.fileDescriptor)
             } catch (e: IOException) {
-                Log.e(tag, "unable to bind", e)
+                printLog(e)
                 return
             }
             while (running) {
                 try {
                     serverSocket.accept()
                 } catch (e: IOException) {
-                    Log.e(tag, "Error when accept socket", e)
-                    app.track(e)
+                    printLog(e)
                     null
                 }?.use(this::accept)
             }

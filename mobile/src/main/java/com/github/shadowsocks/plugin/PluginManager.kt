@@ -21,16 +21,20 @@
 package com.github.shadowsocks.plugin
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.net.Uri
-import android.os.Bundle
 import android.util.Base64
 import android.util.Log
+import androidx.core.os.bundleOf
+import com.crashlytics.android.Crashlytics
 import com.github.shadowsocks.App.Companion.app
 import com.github.shadowsocks.utils.Commandline
+import com.github.shadowsocks.utils.printLog
+import com.github.shadowsocks.utils.signaturesCompat
 import eu.chainfire.libsuperuser.Shell
 import java.io.File
 import java.io.FileNotFoundException
@@ -46,7 +50,7 @@ object PluginManager {
      * public key yet since it will also automatically trust packages signed by the same signatures, e.g. debug keys.
      */
     val trustedSignatures by lazy {
-        app.info.signatures.toSet() +
+        app.info.signaturesCompat.toSet() +
                 Signature(Base64.decode(  // @Mygod
                 """
                     |MIIDWzCCAkOgAwIBAgIEUzfv8DANBgkqhkiG9w0BAQsFADBdMQswCQYDVQQGEwJD
@@ -84,24 +88,27 @@ object PluginManager {
                   """, Base64.DEFAULT))
     }
 
-    private val receiver by lazy { app.listenForPackageChanges { synchronized(this) { cachedPlugins = null } } }
+    private var receiver: BroadcastReceiver? = null
     private var cachedPlugins: Map<String, Plugin>? = null
-    fun fetchPlugins(): Map<String, Plugin> {
-        receiver
-        return synchronized(this) {
-            if (cachedPlugins == null) {
-                val pm = app.packageManager
-                cachedPlugins = (pm.queryIntentContentProviders(Intent(PluginContract.ACTION_NATIVE_PLUGIN),
-                        PackageManager.GET_META_DATA).map { NativePlugin(it) } + NoPlugin).associate { it.id to it }
+    fun fetchPlugins(): Map<String, Plugin> = synchronized(this) {
+        if (receiver == null) receiver = app.listenForPackageChanges {
+            synchronized(this) {
+                receiver = null
+                cachedPlugins = null
             }
-            cachedPlugins!!
         }
+        if (cachedPlugins == null) {
+            val pm = app.packageManager
+            cachedPlugins = (pm.queryIntentContentProviders(Intent(PluginContract.ACTION_NATIVE_PLUGIN),
+                    PackageManager.GET_META_DATA).map { NativePlugin(it) } + NoPlugin).associate { it.id to it }
+        }
+        cachedPlugins!!
     }
 
     private fun buildUri(id: String) = Uri.Builder()
             .scheme(PluginContract.SCHEME)
             .authority(PluginContract.AUTHORITY)
-            .path('/' + id)
+            .path("/$id")
             .build()
     fun buildIntent(id: String, action: String): Intent = Intent(action, buildUri(id))
 
@@ -115,40 +122,38 @@ object PluginManager {
             val path = initNative(options)
             if (path != null) return path
         } catch (t: Throwable) {
-            t.printStackTrace()
-            if (throwable == null) throwable = t
+            if (throwable == null) throwable = t else printLog(t)
         }
 
         // add other plugin types here
 
-        throw if (throwable != null) throwable else
-            FileNotFoundException(app.getString(com.github.shadowsocks.R.string.plugin_unknown, options.id))
+        throw throwable
+                ?: FileNotFoundException(app.getString(com.github.shadowsocks.R.string.plugin_unknown, options.id))
     }
 
     private fun initNative(options: PluginOptions): String? {
         val providers = app.packageManager.queryIntentContentProviders(
                 Intent(PluginContract.ACTION_NATIVE_PLUGIN, buildUri(options.id)), 0)
-        assert(providers.size == 1)
+        if (providers.isEmpty()) return null
         val uri = Uri.Builder()
                 .scheme(ContentResolver.SCHEME_CONTENT)
-                .authority(providers[0].providerInfo.authority)
+                .authority(providers.single().providerInfo.authority)
                 .build()
         val cr = app.contentResolver
         return try {
             initNativeFast(cr, options, uri)
         } catch (t: Throwable) {
-            t.printStackTrace()
-            Log.w("PluginManager", "Initializing native plugin fast mode failed. Falling back to slow mode.")
+            Crashlytics.log(Log.WARN, "PluginManager",
+                    "Initializing native plugin fast mode failed. Falling back to slow mode.")
+            printLog(t)
             initNativeSlow(cr, options, uri)
         }
     }
 
     private fun initNativeFast(cr: ContentResolver, options: PluginOptions, uri: Uri): String {
-        val out = Bundle()
-        out.putString(PluginContract.EXTRA_OPTIONS, options.id)
-        val result = cr.call(uri, PluginContract.METHOD_GET_EXECUTABLE, null, out)
-                .getString(PluginContract.EXTRA_ENTRY)
-        assert(File(result).canExecute())
+        val result = cr.call(uri, PluginContract.METHOD_GET_EXECUTABLE, null,
+                bundleOf(Pair(PluginContract.EXTRA_OPTIONS, options.id)))!!.getString(PluginContract.EXTRA_ENTRY)!!
+        check(File(result).canExecute())
         return result
     }
 
@@ -157,7 +162,7 @@ object PluginManager {
         var initialized = false
         fun entryNotFound(): Nothing = throw IndexOutOfBoundsException("Plugin entry binary not found")
         val list = ArrayList<String>()
-        val pluginDir = File(app.deviceContext.filesDir, "plugin")
+        val pluginDir = File(app.deviceStorage.filesDir, "plugin")
         (cr.query(uri, arrayOf(PluginContract.COLUMN_PATH, PluginContract.COLUMN_MODE), null, null, null)
                 ?: return null).use { cursor ->
             if (!cursor.moveToFirst()) entryNotFound()
@@ -167,8 +172,8 @@ object PluginManager {
             do {
                 val path = cursor.getString(0)
                 val file = File(pluginDir, path)
-                assert(file.absolutePath.startsWith(pluginDirPath))
-                cr.openInputStream(uri.buildUpon().path(path).build()).use { inStream ->
+                check(file.absolutePath.startsWith(pluginDirPath))
+                cr.openInputStream(uri.buildUpon().path(path).build())!!.use { inStream ->
                     file.outputStream().use { outStream -> inStream.copyTo(outStream) }
                 }
                 list += Commandline.toString(arrayOf("chmod", cursor.getString(1), file.absolutePath))

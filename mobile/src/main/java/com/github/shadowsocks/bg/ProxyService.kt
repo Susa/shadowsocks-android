@@ -22,8 +22,6 @@ package com.github.shadowsocks.bg
 
 import android.app.Service
 import android.content.Intent
-import android.os.IBinder
-import com.github.shadowsocks.database.Profile
 
 /**
  * Shadowsocks service at its minimum.
@@ -37,7 +35,7 @@ class ProxyService : Service(), BaseService.Interface {
     override fun createNotification(profileName: String): ServiceNotification =
             ServiceNotification(this, profileName, "service-proxy", true)
 
-    override fun onBind(intent: Intent): IBinder? = super.onBind(intent)
+    override fun onBind(intent: Intent) = super.onBind(intent)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
             super<BaseService.Interface>.onStartCommand(intent, flags, startId)
 }
